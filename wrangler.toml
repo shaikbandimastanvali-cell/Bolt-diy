@@ -5,10 +5,8 @@ compatibility_date = "2025-03-28"
 pages_build_output_dir = "./build/client"
 send_metrics = false
 
-# --- ADD THESE LINES AT THE BOTTOM ---
 [vars]
 NODE_VERSION = "20"
 PNPM_VERSION = "9"
-OPENAI_LIKE_API_KEY = "my_secret_bolt_password_123"
 OPENAI_LIKE_API_BASE_URL = "https://integrate.api.nvidia.com/v1"
 OPENAI_LIKE_MODELS = "meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-r1,nvidia/glm-4-5-128k,z-ai/glm-5.2,nvidia/llama-3.1-nemotron-70b-instruct"
