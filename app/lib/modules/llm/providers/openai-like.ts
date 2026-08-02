@@ -7,7 +7,6 @@ export default class OpenAILikeProvider extends BaseProvider {
   name = 'OpenAILike';
   getApiKeyLink = undefined;
 
-  // This maps the UI boxes to the internal Bolt system
   config = {
     baseUrlKey: 'OPENAI_LIKE_API_BASE_URL',
     apiTokenKey: 'OPENAI_LIKE_API_KEY',
@@ -23,6 +22,7 @@ export default class OpenAILikeProvider extends BaseProvider {
     }
   ];
 
+  // KILL THE CORS HEALTH CHECK: This stops the browser from ever pinging NVIDIA directly
   async getDynamicModels(
     apiKeys?: Record<string, string>,
     settings?: IProviderSetting,
@@ -63,22 +63,16 @@ export default class OpenAILikeProvider extends BaseProvider {
     const { model, serverEnv, apiKeys, providerSettings } = options;
     const envRecord = this.convertEnvToRecord(serverEnv);
 
-    // This fetches exactly what you typed into the UI Settings boxes
-    const { baseUrl, apiKey } = this.getProviderBaseUrlAndKey({
-      apiKeys,
-      providerSettings: providerSettings?.[this.name],
-      serverEnv: envRecord,
-      defaultBaseUrlKey: 'OPENAI_LIKE_API_BASE_URL',
-      defaultApiTokenKey: 'OPENAI_LIKE_API_KEY',
-    });
+    // Grab the key typed into the UI box right above your chat panel
+    const userEnteredKey = (apiKeys?.[this.name] || '').trim();
+    
+    const finalBaseUrl = (envRecord.OPENAI_LIKE_API_BASE_URL || 'https://integrate.api.nvidia.com/v1').trim();
 
-    const finalApiKey = (apiKey || '').trim();
-    const finalBaseUrl = (baseUrl || envRecord.OPENAI_LIKE_API_BASE_URL || 'https://nvidia.com').trim();
-
-    if (!finalApiKey) {
-      throw new Error('Please enter your API Key in the OpenAILike settings panel.');
+    if (!userEnteredKey) {
+      throw new Error('Please enter your NVIDIA API Key in the box above the chat.');
     }
 
-    return getOpenAILikeModel(finalBaseUrl, finalApiKey, model);
+    // Proxy the request safely through Cloudflare using the key from your chat header box
+    return getOpenAILikeModel(finalBaseUrl, userEnteredKey, model);
   }
 }
