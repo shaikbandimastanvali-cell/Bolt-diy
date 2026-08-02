@@ -18,7 +18,15 @@ export default class OpenAILikeProvider extends BaseProvider {
     modelsKey: 'OPENAI_LIKE_API_MODELS',
   };
 
-  staticModels: ModelInfo[] = [];
+  // Hardcode GLM-5.2 here to guarantee it always appears as a foundational coding option
+  staticModels: ModelInfo[] = [
+    {
+      name: 'z-ai/glm-5.2',
+      label: 'NVIDIA Z-AI GLM-5.2 (1M Context)',
+      provider: 'OpenAILike',
+      maxTokenAllowed: 1000000,
+    }
+  ];
 
   async getDynamicModels(
     apiKeys?: Record<string, string>,
@@ -34,7 +42,7 @@ export default class OpenAILikeProvider extends BaseProvider {
     });
 
     if (!baseUrl || !apiKey) {
-      return [];
+      return this.staticModels;
     }
 
     try {
@@ -51,33 +59,28 @@ export default class OpenAILikeProvider extends BaseProvider {
 
       const res = (await response.json()) as OpenAIModelsResponse;
 
-      return res.data.map((model) => ({
+      const fetchedModels = res.data.map((model) => ({
         name: model.id,
-        label: model.id,
+        label: this._generateModelLabel(model.id),
         provider: this.name,
         maxTokenAllowed: 8000,
       }));
+
+      return [...this.staticModels, ...fetchedModels];
     } catch (error) {
       logger.info(`${this.name}: Could not fetch /models endpoint, checking fallback env`, error);
 
-      // Fallback to OPENAI_LIKE_API_MODELS if available
-      // eslint-disable-next-line dot-notation
       const modelsEnv = serverEnv['OPENAI_LIKE_API_MODELS'] || settings?.OPENAI_LIKE_API_MODELS;
 
       if (modelsEnv) {
         logger.info(`${this.name}: Using OPENAI_LIKE_API_MODELS fallback`);
-
-        return this._parseModelsFromEnv(modelsEnv);
+        return [...this.staticModels, ...this._parseModelsFromEnv(modelsEnv)];
       }
 
-      return [];
+      return this.staticModels;
     }
   }
 
-  /**
-   * Parse OPENAI_LIKE_API_MODELS environment variable
-   * Format: path/to/model1:limit;path/to/model2:limit;path/to/model3:limit
-   */
   private _parseModelsFromEnv(modelsEnv: string): ModelInfo[] {
     if (!modelsEnv) {
       return [];
@@ -85,68 +88,34 @@ export default class OpenAILikeProvider extends BaseProvider {
 
     try {
       const models: ModelInfo[] = [];
-      const modelEntries = modelsEnv.split(';');
+      const modelEntries = modelsEnv.split(',');
 
       for (const entry of modelEntries) {
-        const trimmedEntry = entry.trim();
+        const modelName = entry.trim();
 
-        if (!trimmedEntry) {
+        if (!modelName) {
           continue;
         }
-
-        const [modelPath, limitStr] = trimmedEntry.split(':');
-
-        if (!modelPath) {
-          continue;
-        }
-
-        const limit = limitStr ? parseInt(limitStr.trim(), 10) : 8000;
-        const modelName = modelPath.trim();
-
-        // Generate a readable label from the model path
-        const label = this._generateModelLabel(modelName);
 
         models.push({
           name: modelName,
-          label,
+          label: this._generateModelLabel(modelName),
           provider: this.name,
-          maxTokenAllowed: limit,
+          maxTokenAllowed: 8000,
         });
       }
 
-      logger.info(`${this.name}: Parsed ${models.length} models from env`);
-
       return models;
     } catch (error) {
-      logger.error(`${this.name}: Error parsing OPENAI_LIKE_API_MODELS:`, error);
+      logger.error(`${this.name}: Error parsing models:`, error);
       return [];
     }
   }
 
-  /**
-   * Generate a readable label from model path
-   */
   private _generateModelLabel(modelPath: string): string {
-    // Extract the last part of the path and clean it up
     const parts = modelPath.split('/');
     const lastPart = parts[parts.length - 1];
-
-    // Remove common prefixes and clean up the name
-    let label = lastPart
-      .replace(/^accounts\//, '')
-      .replace(/^fireworks\/models\//, '')
-      .replace(/^models\//, '')
-      // Capitalize first letter of each word
-      .replace(/\b\w/g, (l) => l.toUpperCase())
-      // Replace spaces with hyphens for a cleaner look
-      .replace(/\s+/g, '-');
-
-    // Add provider suffix if not already present
-    if (!label.includes('Fireworks') && !label.includes('OpenAI')) {
-      label += ' (OpenAI Compatible)';
-    }
-
-    return label;
+    return lastPart.toUpperCase();
   }
 
   getModelInstance(options: {
@@ -166,10 +135,22 @@ export default class OpenAILikeProvider extends BaseProvider {
       defaultApiTokenKey: 'OPENAI_LIKE_API_KEY',
     });
 
-    if (!baseUrl || !apiKey) {
-      throw new Error(`Missing configuration for ${this.name} provider`);
+    // Check if the password entered in the UI matches your wrangler.toml file
+    const userEnteredKey = apiKey;
+    const expectedPassword = envRecord.OPENAI_LIKE_API_KEY;
+
+    if (userEnteredKey !== expectedPassword) {
+      throw new Error('Unauthorized: Invalid custom Bolt gateway password.');
     }
 
-    return getOpenAILikeModel(baseUrl, apiKey, model);
+    // Swaps your password for the hidden real NVIDIA key from Cloudflare Secrets
+    const realNvidiaToken = envRecord.REAL_NVIDIA_API_KEY;
+    const finalBaseUrl = baseUrl || envRecord.OPENAI_LIKE_API_BASE_URL;
+
+    if (!realNvidiaToken) {
+      throw new Error('Server Config Error: REAL_NVIDIA_API_KEY missing in Cloudflare Dashboard.');
+    }
+
+    return getOpenAILikeModel(finalBaseUrl, realNvidiaToken, model);
   }
 }
