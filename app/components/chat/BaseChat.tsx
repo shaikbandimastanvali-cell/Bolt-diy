@@ -289,23 +289,38 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
     };
 
-    const handleFileUpload = () => {
+const handleFileUpload = () => {
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = 'image/*';
+      
+      // FIX 1: Tell the file picker to show code files alongside images
+      input.accept = 'image/*,text/*,.tsx,.ts,.jsx,.js,.json,.html,.css,.py,.md,.txt,.toml,.yaml,.yml';
 
       input.onchange = async (e) => {
         const file = (e.target as HTMLInputElement).files?.[0];
 
         if (file) {
+          // FIX 2: Check the file extension to see if it's a code file
+          let processedFile = file;
+          const extension = file.name.split('.').pop()?.toLowerCase();
+          const codeExtensions = ['tsx', 'ts', 'jsx', 'js', 'json', 'py', 'css', 'html', 'md', 'toml', 'yaml', 'yml', 'env'];
+
+          // If the browser doesn't know the type OR if it's a known code extension, force it to 'text/plain'
+          if (!file.type || file.type === 'application/octet-stream' || (extension && codeExtensions.includes(extension))) {
+            // We create a new File object because the original file.type is read-only
+            processedFile = new File([file], file.name, { type: 'text/plain' });
+          }
+
           const reader = new FileReader();
 
           reader.onload = (e) => {
-            const base64Image = e.target?.result as string;
-            setUploadedFiles?.([...uploadedFiles, file]);
-            setImageDataList?.([...imageDataList, base64Image]);
+            const base64Data = e.target?.result as string;
+            // Use the processedFile which now safely has 'text/plain' as its type
+            setUploadedFiles?.([...uploadedFiles, processedFile]);
+            setImageDataList?.([...imageDataList, base64Data]);
           };
-          reader.readAsDataURL(file);
+          
+          reader.readAsDataURL(processedFile);
         }
       };
 
