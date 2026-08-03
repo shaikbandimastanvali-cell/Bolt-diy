@@ -9,5 +9,4 @@ send_metrics = false
 NODE_VERSION = "20"
 PNPM_VERSION = "9"
 OPENAI_LIKE_API_BASE_URL = "https://integrate.api.nvidia.com/v1"
-OPENAI_LIKE_API_KEY = "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"
-OPENAI_LIKE_MODELS = "z-ai/glm-5.2,nvidia/glm-4-5-128k,meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-r1"
+
