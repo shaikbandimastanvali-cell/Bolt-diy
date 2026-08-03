@@ -5,7 +5,9 @@ import type { LanguageModelV1 } from 'ai';
 
 export default class OpenAILikeProvider extends BaseProvider {
   name = 'OpenAILike';
-  getApiKeyLink = undefined;
+  
+  // Setting a link tells bolt.diy that this provider takes an API key in the UI
+  getApiKeyLink = 'https://build.nvidia.com';
 
   config = {
     baseUrlKey: 'OPENAI_LIKE_API_BASE_URL',
@@ -16,20 +18,25 @@ export default class OpenAILikeProvider extends BaseProvider {
   staticModels: ModelInfo[] = [
     {
       name: 'z-ai/glm-5.2',
-      label: 'NVIDIA Z-AI GLM-5.2 (1M Context)',
+      label: 'NVIDIA Z-AI GLM-5.2',
       provider: 'OpenAILike',
-      maxTokenAllowed: 1000000,
+      maxTokenAllowed: 128000,
+    },
+    {
+      name: 'nvidia/glm-4-5-128k',
+      label: 'NVIDIA GLM-4.5',
+      provider: 'OpenAILike',
+      maxTokenAllowed: 128000,
     }
   ];
 
-  // KILL THE CORS HEALTH CHECK: This stops the browser from ever pinging NVIDIA directly
   async getDynamicModels(
     apiKeys?: Record<string, string>,
     settings?: IProviderSetting,
     serverEnv: Record<string, string> = {},
   ): Promise<ModelInfo[]> {
     const envRecord = this.convertEnvToRecord(serverEnv);
-    const modelsEnv = envRecord.OPENAI_LIKE_MODELS || '';
+    const modelsEnv = envRecord.OPENAI_LIKE_MODELS || envRecord.OPENAI_LIKE_API_MODELS || '';
 
     if (modelsEnv) {
       return [...this.staticModels, ...this._parseModelsFromEnv(modelsEnv)];
@@ -60,19 +67,22 @@ export default class OpenAILikeProvider extends BaseProvider {
     apiKeys?: Record<string, string>;
     providerSettings?: Record<string, IProviderSetting>;
   }): LanguageModelV1 {
-    const { model, serverEnv, apiKeys, providerSettings } = options;
+    const { model, serverEnv, apiKeys } = options;
     const envRecord = this.convertEnvToRecord(serverEnv);
 
-    // Grab the key typed into the UI box right above your chat panel
+    // 1. Check for API key entered in the UI box
     const userEnteredKey = (apiKeys?.[this.name] || '').trim();
     
-    const finalBaseUrl = (envRecord.OPENAI_LIKE_API_BASE_URL || 'https://integrate.api.nvidia.com/v1').trim();
+    // 2. Fall back to OPENAI_LIKE_API_KEY set in Cloudflare/wrangler.toml
+    const envKey = (envRecord.OPENAI_LIKE_API_KEY || '').trim();
+    
+    const apiKey = userEnteredKey || envKey;
+    const baseUrl = (envRecord.OPENAI_LIKE_API_BASE_URL || 'https://integrate.api.nvidia.com/v1').trim();
 
-    if (!userEnteredKey) {
-      throw new Error('Please enter your NVIDIA API Key in the box above the chat.');
+    if (!apiKey) {
+      throw new Error('Please enter your NVIDIA API Key in the settings/chat box or set OPENAI_LIKE_API_KEY in Cloudflare.');
     }
 
-    // Proxy the request safely through Cloudflare using the key from your chat header box
-    return getOpenAILikeModel(finalBaseUrl, userEnteredKey, model);
+    return getOpenAILikeModel(baseUrl, apiKey, model);
   }
 }
